@@ -443,3 +443,165 @@ func _show_victory() -> void:
 
 func _restart_game() -> void:
 	get_tree().reload_current_scene()
+	# ... 接續你原本的代碼 ...
+	margin.add_theme_constant_override("margin_left", 26)
+	margin.add_theme_constant_override("margin_right", 26)
+	margin.add_theme_constant_override("margin_top", 26)
+	margin.add_theme_constant_override("margin_bottom", 26)
+	add_child(margin)
+
+	var h_split := HBoxContainer.new()
+	h_split.add_theme_constant_override("theme_item", 20)
+	margin.add_child(h_split)
+
+	# 左側：地圖與關卡選擇區
+	var left_panel := PanelContainer.new()
+	left_panel.custom_minimum_size.x = 280
+	h_split.add_child(left_panel)
+	
+	var left_vbox := VBoxContainer.new()
+	left_panel.add_child(left_vbox)
+	
+	var map_title := Label.new()
+	map_title.text = "--- 探險地圖 ---"
+	left_vbox.add_child(map_title)
+	
+	map_buttons.clear()
+	for i in range(AREAS.size()):
+		var btn := Button.new()
+		btn.text = AREAS[i]["short"]
+		btn.pressed.connect(_on_area_selected.bind(i))
+		left_vbox.add_child(btn)
+		map_buttons.append(btn)
+
+	# 右側：題目與問答主介面
+	var right_vbox := VBoxContainer.new()
+	right_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h_split.add_child(right_vbox)
+
+	# 頂部狀態列
+	var header := HBoxContainer.new()
+	right_vbox.add_child(header)
+	
+	area_label = Label.new()
+	area_label.add_theme_color_override("font_color", GOLD)
+	header.add_child(area_label)
+	
+	score_label = Label.new()
+	score_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	header.add_child(score_label)
+
+	progress_label = Label.new()
+	header.add_child(progress_label)
+
+	# 題目敘述
+	question_label = Label.new()
+	question_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	right_vbox.add_child(question_label)
+
+	# 選項按鈕容器
+	options_box = VBoxContainer.new()
+	right_vbox.add_child(options_box)
+	
+	answer_buttons.clear()
+	for i in range(4):
+		var opt_btn := Button.new()
+		opt_btn.pressed.connect(_on_answer_pressed.bind(i))
+		options_box.add_child(opt_btn)
+		answer_buttons.append(opt_btn)
+
+	# 提示與反饋區
+	hint_label = Label.new()
+	hint_label.add_theme_color_override("font_color", MUTED)
+	right_vbox.add_child(hint_label)
+	
+	feedback_label = Label.new()
+	right_vbox.add_child(feedback_label)
+
+	# 功能按鈕
+	var btn_hb := HBoxContainer.new()
+	right_vbox.add_child(btn_hb)
+	
+	hint_button = Button.new()
+	hint_button.text = "檢視提示"
+	hint_button.pressed.connect(func(): hint_label.text = "提示：" + AREAS[current_area]["questions"][question_position]["hint"])
+	btn_hb.add_child(hint_button)
+	
+	action_button = Button.new()
+	action_button.text = "下一題"
+	action_button.disabled = true
+	action_button.pressed.connect(_on_next_pressed)
+	btn_hb.add_child(action_button)
+
+# 刷新左側地圖按鈕狀態（處理解鎖邏輯）
+func _refresh_map() -> void:
+	for i in range(map_buttons.size()):
+		map_buttons[i].disabled = i >= unlocked_count
+		if i == current_area:
+			map_buttons[i].text = "> " + AREAS[i]["short"] + " <"
+		else:
+			map_buttons[i].text = AREAS[i]["short"] + (" (已通關)" if completed[i] else "")
+
+# 刷新上方分數與進度
+func _refresh_header() -> void:
+	var area_data = AREAS[current_area]
+	area_label.text = area_data["title"] + " 【能力：" + area_data["ability"] + "】"
+	score_label.text = "總積分: %d " % score
+	progress_label.text = " 進度: %d/%d" % [question_position + 1, area_data["questions"].size()]
+
+# 渲染當前題目與選項
+func _render_question() -> void:
+	var q = AREAS[current_area]["questions"][question_position]
+	question_label.text = "\nQ: " + q["prompt"]
+	hint_label.text = ""
+	feedback_label.text = ""
+	action_button.disabled = true
+	
+	for i in range(4):
+		answer_buttons[i].text = q["options"][i]
+		answer_buttons[i].disabled = false
+		answer_buttons[i].remove_theme_color_override("font_color")
+
+# 切換關卡
+func _on_area_selected(idx: int) -> void:
+	current_area = idx
+	question_position = 0
+	_refresh_map()
+	_refresh_header()
+	_render_question()
+
+# 玩家點擊選項
+func _on_answer_pressed(idx: int) -> void:
+	var q = AREAS[current_area]["questions"][question_position]
+	for btn in answer_buttons:
+		btn.disabled = true
+		
+	if idx == q["answer"]:
+		feedback_label.text = "正確！ " + q["explain"]
+		feedback_label.add_theme_color_override("font_color", ACCENT)
+		answer_buttons[idx].add_theme_color_override("font_color", ACCENT)
+		score += 10
+	else:
+		feedback_label.text = "錯誤。 " + q["explain"]
+		feedback_label.add_theme_color_override("font_color", RED)
+		answer_buttons[idx].add_theme_color_override("font_color", RED)
+		answer_buttons[q["answer"]].add_theme_color_override("font_color", ACCENT)
+		
+	_refresh_header()
+	action_button.disabled = false
+
+# 下一題或下一關邏輯
+func _on_next_pressed() -> void:
+	var total_q = AREAS[current_area]["questions"].size()
+	if question_position < total_q - 1:
+		question_position += 1
+		_refresh_header()
+		_render_question()
+	else:
+		# 當前區域完成
+		completed[current_area] = true
+		feedback_label.text = "恭喜通關【" + AREAS[current_area]["short"] + "】！"
+		if unlocked_count == current_area + 1 and unlocked_count < AREAS.size():
+			unlocked_count += 1
+		_refresh_map()
