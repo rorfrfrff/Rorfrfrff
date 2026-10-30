@@ -1,0 +1,11 @@
+# Godot-generated cache and local build output
+.godot/
+dist/
+node_modules/
+test-output/
+game-captures/
+.manus-webdev/
+.manus-logs/
+*.log
+*.tmp
+.DS_Store
